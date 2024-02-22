@@ -1,10 +1,11 @@
 #pragma once
 
-#include "whisper.h"
 #include <drogon/HttpController.h>
+#include <trantor/utils/Logger.h>
 #include <fstream>
 #include <optional>
-#include <trantor/utils/Logger.h>
+#include "common/base.h"
+#include "whisper.h"
 
 #define DR_WAV_IMPLEMENTATION
 #include "utils/dr_wav.h"
@@ -74,15 +75,15 @@ struct whisper_params {
 
   // [TDRZ] speaker turn string
   std::string tdrz_speaker_turn =
-      " [SPEAKER_TURN]"; // TODO: set from command line
+      " [SPEAKER_TURN]";  // TODO: set from command line
 
   std::string openvino_encode_device = "CPU";
 };
 
 struct whisper_print_user_data {
-  const whisper_params *params;
+  const whisper_params* params;
 
-  const std::vector<std::vector<float>> *pcmf32s;
+  const std::vector<std::vector<float>>* pcmf32s;
   int progress_prev;
 };
 
@@ -92,16 +93,16 @@ struct whisper_print_user_data {
 // The sample rate of the audio must be equal to COMMON_SAMPLE_RATE
 // If stereo flag is set and the audio has 2 channels, the pcmf32s will contain
 // 2 channel PCM
-bool read_wav(const std::string &fname, std::vector<float> &pcmf32,
-              std::vector<std::vector<float>> &pcmf32s, bool stereo);
+bool read_wav(const std::string& fname, std::vector<float>& pcmf32,
+              std::vector<std::vector<float>>& pcmf32s, bool stereo);
 
-std::string output_str(struct whisper_context *ctx,
-                       const whisper_params &params,
+std::string output_str(struct whisper_context* ctx,
+                       const whisper_params& params,
                        std::vector<std::vector<float>> pcmf32s);
 
-std::string
-estimate_diarization_speaker(std::vector<std::vector<float>> pcmf32s,
-                             int64_t t0, int64_t t1, bool id_only = false);
+std::string estimate_diarization_speaker(
+    std::vector<std::vector<float>> pcmf32s, int64_t t0, int64_t t1,
+    bool id_only = false);
 
 //  500 -> 00:05.000
 // 6000 -> 01:00.000
@@ -109,26 +110,26 @@ std::string to_timestamp(int64_t t, bool comma = false);
 
 int timestamp_to_sample(int64_t t, int n_samples);
 
-bool is_file_exist(const char *fileName);
+bool is_file_exist(const char* fileName);
 
-void whisper_print_usage(int /*argc*/, char **argv,
-                         const whisper_params &params);
+void whisper_print_usage(int /*argc*/, char** argv,
+                         const whisper_params& params);
 
-bool whisper_params_parse(int argc, char **argv, whisper_params &params);
+bool whisper_params_parse(int argc, char** argv, whisper_params& params);
 
 void check_ffmpeg_availibility();
 
-bool convert_to_wav(const std::string &temp_filename, std::string &error_resp);
+bool convert_to_wav(const std::string& temp_filename, std::string& error_resp);
 
-void whisper_print_progress_callback(struct whisper_context * /*ctx*/,
-                                     struct whisper_state * /*state*/,
-                                     int progress, void *user_data);
+void whisper_print_progress_callback(struct whisper_context* /*ctx*/,
+                                     struct whisper_state* /*state*/,
+                                     int progress, void* user_data);
 
-void whisper_print_segment_callback(struct whisper_context *ctx,
-                                    struct whisper_state * /*state*/, int n_new,
-                                    void *user_data);
+void whisper_print_segment_callback(struct whisper_context* ctx,
+                                    struct whisper_state* /*state*/, int n_new,
+                                    void* user_data);
 
-bool parse_str_to_bool(const std::string &s);
+bool parse_str_to_bool(const std::string& s);
 
 struct whisper_server_context {
   whisper_params params;
@@ -137,12 +138,12 @@ struct whisper_server_context {
   std::string model_id;
 
   struct whisper_context_params cparams;
-  struct whisper_context *ctx = nullptr;
+  struct whisper_context* ctx = nullptr;
 
-  whisper_server_context() = default; // add this line
+  whisper_server_context() = default;  // add this line
 
   // Constructor
-  whisper_server_context(const std::string &model_id) {
+  whisper_server_context(const std::string& model_id) {
     this->model_id = model_id;
     this->cparams = whisper_context_params();
     this->ctx = nullptr;
@@ -152,20 +153,21 @@ struct whisper_server_context {
   }
 
   // Move constructor
-  whisper_server_context(whisper_server_context &&other) noexcept
+  whisper_server_context(whisper_server_context&& other) noexcept
       : params(std::move(other.params)),
         default_params(std::move(other.default_params)),
-        whisper_mutex() // std::mutex is not movable, so we initialize a new one
+        whisper_mutex()  // std::mutex is not movable, so we initialize a new one
         ,
-        model_id(std::move(other.model_id)), cparams(std::move(other.cparams)),
+        model_id(std::move(other.model_id)),
+        cparams(std::move(other.cparams)),
         ctx(std::exchange(
             other.ctx,
-            nullptr)) // ctx is a raw pointer, so we use std::exchange
+            nullptr))  // ctx is a raw pointer, so we use std::exchange
   {}
 
-  bool load_model(std::string &model_path);
+  bool load_model(std::string& model_path);
 
-  std::string inference(std::string &input_file_path, std::string languague,
+  std::string inference(std::string& input_file_path, std::string languague,
                         std::string prompt, std::string response_format,
                         float temperature, bool translate);
 
@@ -174,45 +176,59 @@ struct whisper_server_context {
 
 using namespace drogon;
 
-class whisperCPP : public drogon::HttpController<whisperCPP> {
-public:
+namespace audio {
+class whisperCPP : public drogon::HttpController<whisperCPP>,
+                   public BaseModel,
+                   public BaseAudio {
+ public:
+  whisperCPP();
+  ~whisperCPP();
   METHOD_LIST_BEGIN
 
-  ADD_METHOD_TO(whisperCPP::load_model, "/v1/audio/load_model", Post);
-  ADD_METHOD_TO(whisperCPP::unload_model, "/v1/audio/unload_model", Post);
-  ADD_METHOD_TO(whisperCPP::list_model, "/v1/audio/list_model", Get);
+  ADD_METHOD_TO(whisperCPP::LoadModel, "/v1/audio/load_model", Post);
+  ADD_METHOD_TO(whisperCPP::UnloadModel, "/v1/audio/unload_model", Post);
+  ADD_METHOD_TO(whisperCPP::ListModels, "/v1/audio/list_model", Get);
+  ADD_METHOD_TO(whisperCPP::ModelStatus, "/v1/audio/model_status", Get);
 
-  ADD_METHOD_TO(whisperCPP::transcription, "/v1/audio/transcriptions", Post);
-  ADD_METHOD_TO(whisperCPP::translation, "/v1/audio/translations", Post);
+  ADD_METHOD_TO(whisperCPP::CreateTranscription, "/v1/audio/transcriptions",
+                Post);
+  ADD_METHOD_TO(whisperCPP::CreateTranslation, "/v1/audio/translations", Post);
 
   METHOD_LIST_END
+  void LoadModel(
+      const HttpRequestPtr& req,
+      std::function<void(const HttpResponsePtr&)>&& callback) override;
 
-  whisperCPP() { whisper_print_system_info(); }
+  void UnloadModel(
+      const HttpRequestPtr& req,
+      std::function<void(const HttpResponsePtr&)>&& callback) override;
 
-  void load_model(const HttpRequestPtr &req,
-                  std::function<void(const HttpResponsePtr &)> &&callback);
+  // TODO: Add to the BaseModel interface
+  void ListModels(const HttpRequestPtr& req,
+                  std::function<void(const HttpResponsePtr&)>&& callback);
 
-  void unload_model(const HttpRequestPtr &req,
-                    std::function<void(const HttpResponsePtr &)> &&callback);
+  // TODO: Unimplemented
+  void ModelStatus(
+      const HttpRequestPtr& req,
+      std::function<void(const HttpResponsePtr&)>&& callback) override;
 
-  void list_model(const HttpRequestPtr &req,
-                  std::function<void(const HttpResponsePtr &)> &&callback);
+  void CreateTranscription(
+      const HttpRequestPtr& req,
+      std::function<void(const HttpResponsePtr&)>&& callback) override;
 
-  void transcription(const HttpRequestPtr &req,
-                     std::function<void(const HttpResponsePtr &)> &&callback);
+  void CreateTranslation(
+      const HttpRequestPtr& req,
+      std::function<void(const HttpResponsePtr&)>&& callback) override;
 
-  void translation(const HttpRequestPtr &req,
-                   std::function<void(const HttpResponsePtr &)> &&callback);
-
-private:
+ private:
   std::unordered_map<std::string, whisper_server_context> whispers;
 
-  std::optional<std::string>
-  parse_model_id(const std::shared_ptr<Json::Value> &jsonBody,
-                 const std::function<void(const HttpResponsePtr &)> &callback);
+  std::optional<std::string> ParseModelId(
+      const std::shared_ptr<Json::Value>& jsonBody,
+      const std::function<void(const HttpResponsePtr&)>& callback);
 
-  void
-  transcription_impl(const HttpRequestPtr &req,
-                     std::function<void(const HttpResponsePtr &)> &&callback,
-                     bool translate);
+  void TranscriptionImpl(const HttpRequestPtr& req,
+                         std::function<void(const HttpResponsePtr&)>&& callback,
+                         bool translate);
 };
+}  // namespace audio
